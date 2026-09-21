@@ -57,6 +57,20 @@ curl -X POST http://localhost:8000/api/v1/estimate \
   }'
 ```
 
+## Aplicación Web Interactiva con Streamlit
+
+El proyecto incluye una aplicación web de chat con streaming en tiempo real y panel de inspección de contexto CAG:
+
+```bash
+uv run streamlit run streamlit_app.py
+# o bien: streamlit run streamlit_app.py
+```
+
+La aplicación abrirá la interfaz en `http://localhost:8501` y cuenta con:
+- **Chat interactivo:** Envío de transcripciones de reuniones y persistencia de conversación (`st.session_state`).
+- **Streaming en tiempo real:** Estimaciones mostradas token a token (`st.write_stream`).
+- **Panel lateral CAG:** Visualización del system prompt activo, ejemplos de estimación de referencia inyectados y métricas de la última llamada (modelo, tokens de entrada/salida y tiempo de respuesta).
+
 ## Estructura del proyecto
 
 ```

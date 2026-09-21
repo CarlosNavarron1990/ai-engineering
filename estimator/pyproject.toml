@@ -13,6 +13,7 @@ dependencies = [
     "anthropic>=0.40",
     "python-dotenv>=1.0",
     "structlog>=24.0",
+    "streamlit>=1.64.0",
 ]
 
 [dependency-groups]
@@ -26,6 +27,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["._*", "**/._*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
