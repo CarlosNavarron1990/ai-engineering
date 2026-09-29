@@ -1,0 +1,65 @@
+### Reference Estimation Examples
+
+#### Example 1: Mobile App — Courier & On-Demand Delivery Application (iOS & Android)
+**Context:** Native cross-platform application for couriers with real-time GPS tracking, dispatch assignments, offline mode, and push notifications.
+**Project Type:** mobile_app | **Format:** Tabular | **Detail Level:** Detailed
+
+##### Project Summary
+Complete delivery agent mobile solution for Flutter/React Native communicating with a central logistics REST API and WebSocket events. Includes geolocation tracking, background battery optimization, camera proof-of-delivery, and instant alerts.
+
+##### Milestone Breakdown
+| Phase | Scope & Key Deliverables | Estimated Hours | Cost (EUR) | Confidence |
+| :--- | :--- | :---: | :---: | :---: |
+| Discovery & UI/UX | Flow wireframes, courier usability testing, design system | 64 | 3,200.00 | 90% |
+| Core Architecture & Auth | JWT auth, offline SQLite cache, background location services | 96 | 6,000.00 | 85% |
+| Order Lifecycle & Live Map | Mapbox/Google Maps integration, live routing, state machine | 120 | 7,500.00 | 80% |
+| Proof-of-Delivery & Media | Photo capture, digital signature, S3 image upload with retry | 56 | 3,500.00 | 90% |
+| Push Notifications & Alerts | FCM/APNs deep-linking, sound profiles, connection resilience | 48 | 3,000.00 | 85% |
+| Testing & Store Deployment | Device farm testing, TestFlight, Google Play internal track | 56 | 3,500.00 | 85% |
+| **Total** | **All deliverables** | **440** | **26,700.00** | **85%** |
+
+##### Phase Assumptions & Risk Factors
+- **Discovery & UI/UX:** Assumes client branding assets are supplied within week 1.
+- **Core Architecture & Auth:** Assumes backend team provides stable staging endpoints and API contracts (OpenAPI/Swagger).
+- **Order Lifecycle & Live Map:** Assumes Mapbox or Google Maps licensing is provisioned directly by the client. Battery-saving trade-offs apply.
+- **Testing & Store Deployment:** Assumes Apple Developer and Google Play Console accounts have appropriate administrative credentials configured.
+
+
+#### Example 2: Web SaaS — Multi-Tenant Customer Analytics & Billing Portal
+**Context:** B2B SaaS web portal enabling companies to track churn, manage Stripe subscriptions, invite team members, and export compliance reports.
+**Project Type:** web_saas | **Format:** Tabular | **Detail Level:** Detailed
+
+##### Project Summary
+Next.js web application with a FastAPI/PostgreSQL backend implementing multi-tenant isolation, role-based access control (RBAC), Stripe Billing webhook integrations, and automated PDF export generation.
+
+##### Milestone Breakdown
+| Phase | Scope & Key Deliverables | Estimated Hours | Cost (EUR) | Confidence |
+| :--- | :--- | :---: | :---: | :---: |
+| Tenant Isolation & Auth | Multi-tenant schema design, OAuth2 / SSO, role permissions | 80 | 5,000.00 | 90% |
+| Stripe Billing Integration | Subscription tiers, metered usage sync, webhook handlers, customer portal | 88 | 5,500.00 | 85% |
+| Analytics Dashboard | Churn charts, MRR calculation, cohort retention tables | 110 | 6,875.00 | 80% |
+| Export Engine & Audit Logs | Asynchronous report generation, worker queues, compliance logging | 60 | 3,750.00 | 85% |
+| Security Hardening & CI/CD | Penetration testing fixes, automated testing suite, Terraform staging/prod | 64 | 4,000.00 | 90% |
+| **Total** | **All deliverables** | **402** | **25,125.00** | **86%** |
+
+##### Phase Assumptions & Risk Factors
+- **Tenant Isolation & Auth:** Assumes row-level security (RLS) in PostgreSQL with tenant identifier verification on every query.
+- **Stripe Billing Integration:** Assumes Stripe test accounts and webhooks are reachable in staging.
+- **Analytics Dashboard:** Assumes data volumes under 500k monthly events; heavier volumes may require read-replica or OLAP indexing.
+- **Security Hardening & CI/CD:** Assumes cloud provider (AWS/GCP) IAM policies allow automated provisioning via CI/CD service accounts.
+
+
+#### Example 3: Data Pipeline — High-Throughput E-Commerce Event Ingestion & BI Sync
+**Context:** Automated data ingestion and ETL pipeline aggregating catalog changes, order streams, and inventory updates into Snowflake/BigQuery for analytics.
+**Project Type:** data_pipeline | **Format:** line_items | **Detail Level:** medium
+
+##### Project Summary
+Event-driven processing pipeline using Kafka/PubSub, dbt transformations, and automated data quality checks, ensuring accurate metrics and automated alerting on anomalies.
+
+##### Itemized Breakdown
+- **Source Connectors & Schema Validation:** 72 hours @ 62.50 EUR/h = 4,500.00 EUR
+- **Streaming Ingestion & Dead-Letter Queue:** 84 hours @ 62.50 EUR/h = 5,250.00 EUR
+- **dbt Transformation Models & Marts:** 90 hours @ 62.50 EUR/h = 5,625.00 EUR
+- **Data Quality Assertions & Slack Alerting:** 40 hours @ 62.50 EUR/h = 2,500.00 EUR
+- **CI/CD Pipeline & Orchestration (Airflow/Dagster):** 54 hours @ 62.50 EUR/h = 3,375.00 EUR
+- **Total:** 340 hours = 21,250.00 EUR | Estimated Duration: 7 weeks | Team: 1 Senior Data Engineer, 1 Analytics Engineer

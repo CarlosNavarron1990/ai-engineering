@@ -1,144 +1,189 @@
-# Estimator CAG - Servicio de Estimacion de Software con IA
+# Estimator CAG - Servicio de Estimación de Software con IA
 
-Servicio de estimacion de proyectos de software impulsado por IA, utilizando una arquitectura **Cache Augmented Generation (CAG)**.
+Servicio de estimación de proyectos de software impulsado por IA, utilizando una arquitectura **Cache Augmented Generation (CAG)** con prompts modulares Jinja2 y contratos fuertemente tipados con **Pydantic v2**.
 
-## Que es CAG y por que lo usamos
+---
 
-CAG (Cache Augmented Generation) es un patron de arquitectura donde el contexto relevante se inyecta directamente en el prompt del LLM como texto estatico. En esta fase del proyecto, las estimaciones de referencia se incluyen como ejemplos dentro del prompt del sistema, sin necesidad de una base de datos vectorial ni busqueda semantica.
+## Novedades Pre-Sesión 04: Formulario Tipado y Prompts Versionados Jinja2
 
-Este enfoque es ideal para empezar porque:
-- Es simple de implementar y depurar
-- No requiere infraestructura adicional (ni embeddings, ni vector stores)
-- Funciona bien cuando el volumen de contexto es manejable (pocos ejemplos)
+En la Sesión 03 el estimator dependía de un chat con textarea libre y prompts hardcodeados como f-strings dentro del código. En esta versión:
+1. **Formulario tipado en el frontend:** El cliente Streamlit (`streamlit_app.py`) sustituye el chat por un formulario con `st.form` que produce un `EstimationRequest` validado.
+2. **Prompts versionados en Jinja2:** Se extrae el prompting del código a plantillas versionadas bajo `app/prompts/estimation/v1/` y `v2/`, gestionadas por un loader (`app/prompts/loader.py`) configurado con `StrictUndefined`, `trim_blocks=True` y `lstrip_blocks=True`.
+3. **Endpoint refactorizado:** `POST /api/v1/estimate` y `POST /estimate` consumen `EstimationRequest`, envían al LLM los roles `system` y `user` de forma separada vía `LLMWrapper`, y devuelven `EstimationResponse(text=..., prompt_version=...)`.
+4. **Extensiones bonus implementadas:**
+   - **Versionado real:** Plantillas `v2/` con enfoque Lean & Agile MVP, invocable mediante `?prompt_version=v2`.
+   - **Proyectos de referencia:** Soporte para `reference_projects` opcionales en el schema recorridos con `{% for %}` en el template.
+   - **Observabilidad:** Emisión de eventos `structlog` con `content_hash` SHA-256 del prompt renderizado.
 
-En modulos posteriores del master, este servicio evolucionara a una arquitectura **RAG** (Retrieval Augmented Generation) con base de datos vectorial para manejar un volumen mayor de ejemplos.
+---
 
-## Requisitos previos
+## Estructura del Proyecto
 
-- **Docker** y **Docker Compose** instalados
-- Una **API key** de OpenAI o Anthropic
-- Python **NO** es necesario localmente — todo se ejecuta dentro del contenedor
+```
+estimator/
+├── app/
+│   ├── main.py                    # Aplicación FastAPI, health check, CORS y routers
+│   ├── config.py                  # Configuración con Pydantic Settings
+│   ├── dependencies.py            # Inyección de dependencias (LLMWrapper, cache)
+│   ├── routers/
+│   │   └── estimations.py         # Endpoints POST /estimate y POST /estimate/stream
+│   ├── schemas/
+│   │   ├── __init__.py            # Re-export de schemas
+│   │   └── estimation.py          # Modelos Pydantic v2 (EstimationRequest, EstimationResponse, Enums)
+│   ├── prompts/
+│   │   ├── loader.py              # Loader Jinja2 con StrictUndefined y hash structlog
+│   │   └── estimation/
+│   │       ├── v1/                # Prompt v1: Consultoría clásica y desglose detallado
+│   │       │   ├── system.j2      # Rol, tasas, formateo condicional e inclusión de ejemplos
+│   │       │   ├── user.j2        # Bloque <project_description> y referencia de proyectos
+│   │       │   └── examples.j2    # 3 ejemplos few-shot de estimaciones reales
+│   │       └── v2/                # Prompt v2: Enfoque ágil, lean MVP y contingencia
+│   │           ├── system.j2
+│   │           ├── user.j2
+│   │           └── examples.j2
+│   └── services/
+│       ├── llm_wrapper.py         # Wrapper LiteLLM, cache exact-match y fallback
+│       ├── cache.py               # Cache Redis
+│       └── evaluation.py          # Evaluador estructural
+├── streamlit_app.py               # Frontend Streamlit con formulario tipado
+├── tests/
+│   ├── prompts/
+│   │   └── test_estimation_v1.py  # Tests unitarios del template Jinja2 (milisegundos)
+│   ├── test_estimate_endpoint.py  # Tests de integración del endpoint POST /estimate
+│   ├── test_cache.py              # Tests de cache Redis
+│   ├── test_llm_wrapper.py        # Tests del wrapper LiteLLM
+│   └── test_health.py             # Health check
+└── pyproject.toml                 # Dependencias (incluye jinja2)
+```
 
-## Inicio rapido con Docker (recomendado)
+---
 
-1. Clonar el repositorio y entrar al directorio:
-   ```bash
-   cd estimator
-   ```
+## Contrato de Datos (Pydantic v2)
 
-2. Copiar el archivo de variables de entorno y configurar las API keys:
-   ```bash
-   cp .env.example .env
-   # Editar .env y poner tu API key real
-   ```
+```python
+class ProjectType(str, Enum):
+    MOBILE_APP = "mobile_app"
+    WEB_SAAS = "web_saas"
+    INTERNAL_TOOL = "internal_tool"
+    DATA_PIPELINE = "data_pipeline"
 
-3. Construir y levantar el servicio:
-   ```bash
-   docker compose up --build
-   ```
+class DetailLevel(str, Enum):
+    SUMMARY = "summary"
+    MEDIUM = "medium"
+    DETAILED = "detailed"
 
-4. El servicio estara disponible en `http://localhost:8000`
+class OutputFormat(str, Enum):
+    PHASES_TABLE = "phases_table"
+    LINE_ITEMS = "line_items"
+    NARRATIVE = "narrative"
 
-## Alternativa: ejecucion local sin Docker
+class EstimationRequest(BaseModel):
+    description: str = Field(min_length=20, max_length=2000)
+    project_type: ProjectType
+    detail_level: DetailLevel
+    output_format: OutputFormat
+    reference_projects: list[ReferenceProject] | None = None
+
+class EstimationResponse(BaseModel):
+    text: str
+    prompt_version: str
+```
+
+---
+
+## Cómo Levantar el Proyecto
+
+### 1. Variables de Entorno
+
+Copia el archivo `.env.example` y define tus API keys:
+
+```bash
+cp .env.example .env
+# Configura OPENAI_API_KEY o ANTHROPIC_API_KEY
+```
+
+### 2. Iniciar el Servicio FastAPI
 
 ```bash
 uv sync
-# Configurar .env con tus API keys
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
-## Probar el servicio
+El servicio estará disponible en:
+- API Base: `http://localhost:8000`
+- Documentación interactiva Swagger: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+
+### 3. Iniciar la Interfaz Streamlit
+
+En otra terminal:
+
+```bash
+uv run streamlit run streamlit_app.py
+```
+
+Abre [http://localhost:8501](http://localhost:8501) en tu navegador para interactuar con el formulario.
+
+---
+
+## Ejecución de Tests
+
+Los tests de plantillas Jinja2 y del endpoint corren en milisegundos sin tocar APIs externas:
+
+```bash
+# Ejecutar toda la suite de pruebas (41 tests)
+uv run pytest
+
+# Ejecutar únicamente los tests de plantillas Jinja2 (v1 y v2)
+uv run pytest tests/prompts/test_estimation_v1.py -v
+
+# Ejecutar tests del endpoint POST /estimate
+uv run pytest tests/test_estimate_endpoint.py -v
+```
+
+---
+
+## Ejemplos de Peticiones con `curl`
+
+### Petición estándar (Prompt v1 con Phases Table)
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/estimate \
   -H "Content-Type: application/json" \
   -d '{
-    "transcription": "The client wants to build a mobile app for managing restaurant reservations. They need user registration, a restaurant search with filters by cuisine and location, a real-time reservation system with availability checking, push notifications for reservation confirmations and reminders, and an admin panel for restaurant owners to manage their listings and view analytics."
+    "description": "Plataforma B2B para gestión de suscripciones recurrentes, integración con Stripe Billing, roles y permisos.",
+    "project_type": "web_saas",
+    "detail_level": "detailed",
+    "output_format": "phases_table"
   }'
 ```
 
-## Estructura del proyecto
-
-```
-estimator/
-├── app/
-│   ├── main.py            # Aplicacion FastAPI, health check, CORS
-│   ├── config.py           # Configuracion con Pydantic Settings
-│   ├── routers/
-│   │   └── estimations.py  # Endpoint POST /api/v1/estimate
-│   ├── services/
-│   │   └── llm_service.py  # Logica de negocio, llamadas al LLM
-│   ├── schemas/
-│   │   └── estimation.py   # Modelos Pydantic (request/response)
-│   └── context/
-│       └── examples.py     # Ejemplos de estimacion (contexto CAG)
-├── tests/
-│   └── test_health.py      # Tests basicos
-├── Dockerfile              # Build multi-stage con uv
-├── docker-compose.yml      # Configuracion para desarrollo local
-└── pyproject.toml          # Dependencias y configuracion
-```
-
-## Documentacion interactiva
-
-Con el servicio corriendo, accede a la documentacion Swagger UI en:
-
-- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-## Sesion 3 — LiteLLM, Redis cache, SSE y Streamlit
-
-A partir de la Sesion 3 el servicio incorpora una capa de wrapper sobre el LLM que anade:
-
-- **Fallback de proveedor** (LiteLLM Router) — si el modelo primario falla, se intenta el secundario
-- **Cache exact-match** en Redis — la misma transcripcion no vuelve a pagar tokens
-- **Streaming SSE** — endpoint `POST /api/v1/estimate/stream` que emite los tokens segun llegan
-- **UI Streamlit** — cliente real que consume el endpoint SSE
-
-### Arrancar la stack completa
+### Petición con Prompt v2 (Agile / Lean) y Proyecto de Referencia
 
 ```bash
-cd estimator
-docker compose up --build
-# La API queda en http://localhost:8000 y Redis en redis://localhost:6379
+curl -X POST "http://localhost:8000/api/v1/estimate?prompt_version=v2" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Aplicación móvil para conductores y repartidores con geolocalización en tiempo real y soporte offline.",
+    "project_type": "mobile_app",
+    "detail_level": "detailed",
+    "output_format": "phases_table",
+    "reference_projects": [
+      {
+        "name": "Fleet Tracker MVP",
+        "description": "App de seguimiento de flotas en Flutter",
+        "duration_weeks": 6,
+        "cost_eur": 18000.0
+      }
+    ]
+  }'
 ```
-
-### Probar el endpoint SSE
-
-Demo HTML: abrir [http://localhost:8000/static/sse_demo.html](http://localhost:8000/static/sse_demo.html).
-
-Desde CLI:
-```bash
-curl -N -X POST http://localhost:8000/api/v1/estimate/stream \
-  -H 'Content-Type: application/json' \
-  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}'
-```
-
-### Verificar la cache
-
-```bash
-# La misma peticion dos veces — la segunda devuelve cache_hit: true
-curl -s localhost:8000/api/v1/estimate -H 'Content-Type: application/json' \
-  -d '{"transcription": "We need a small CRM with auth, contacts and roles. MVP six weeks."}' \
-  | jq '{cache_hit, cost_usd}'
-
-# Inspeccionar las claves en Redis
-docker compose exec redis redis-cli KEYS 'estimation:*'
-```
-
-### Streamlit
-
-Streamlit corre **fuera** de Docker y consume el endpoint SSE por HTTP:
-
-```bash
-cd estimator
-uv sync
-uv run streamlit run streamlit_app.py
-# Abrir http://localhost:8501
-```
-
-La URL del backend se lee de `ESTIMATOR_API_BASE_URL` (default `http://localhost:8000`).
 
 ---
 
-> Este proyecto forma parte del **Master en AI Engineering** y servira como base para evolucionar hacia una arquitectura RAG con base de datos vectorial en modulos posteriores.
+## Objetivos de Aprendizaje Demostrados
+
+- **Formulario tipado vs. chat libre:** Cuando el espacio de tareas es acotado (estimación técnica), un formulario restringe el espacio de estados, previene alucinaciones por ambigüedad y garantiza que el LLM reciba todas las variables críticas (tipo de proyecto, profundidad y formato) con validación previa de tipos.
+- **Templates Jinja2 con Loader vs. f-strings:** Separar la lógica de negocio de la formulación del prompt facilita iteraciones, desacopla el ciclo de vida del prompt del código del endpoint, y permite auditoría de cambios.
+- **Versionado explícito (`v1/`, `v2/`):** La convención de directorios permite canary deployments, tests A/B en producción y rollback inmediato sin romper contratos existentes.
+- **Cobertura de tests de template:** Los tests verifican interpolación exacta, renderizado condicional de bloques y cumplimiento de `StrictUndefined` instantáneamente, aislando la lógica del template del comportamiento estocástico del modelo.

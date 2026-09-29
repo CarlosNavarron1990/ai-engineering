@@ -1,0 +1,39 @@
+### Reference Estimation Examples (v2: Agile & Lean Delivery)
+
+#### Example 1: Web SaaS — AI Customer Support Copilot (MVP)
+**Context:** Lean AI copilot integrating Zendesk/Freshdesk, indexing knowledge base articles into a vector database (pgvector), and providing agent drafting assistance.
+**Project Type:** web_saas | **Format:** Tabular | **Detail Level:** Detailed
+
+##### Project Summary
+Agile MVP focused on cutting resolution times: embeddings pipeline, RAG retriever, LLM generation service with fallback, and a Zendesk Chrome extension for support agents.
+
+##### Sprint Breakdown
+| Phase | Scope & Key Deliverables | Estimated Hours | Cost (EUR) | Confidence |
+| :--- | :--- | :---: | :---: | :---: |
+| Sprint 1: Knowledge Ingestion | Scraping Zendesk articles, chunking, pgvector embeddings, search API | 60 | 3,750.00 | 90% |
+| Sprint 2: Generation Engine | Prompt template orchestration, LLM fallback router, caching | 72 | 4,500.00 | 85% |
+| Sprint 3: Agent UI Extension | Manifest V3 Chrome Extension, token streaming, approval button | 80 | 5,000.00 | 80% |
+| Sprint 4: Observability & Launch | Latency tracking, feedback loop logging, staging load test | 40 | 2,500.00 | 90% |
+| **Total** | **MVP Sprint Cycle (8 weeks)** | **252** | **15,750.00** | **86%** |
+
+##### Phase Assumptions & Risk Factors
+- **Sprint 1: Knowledge Ingestion:** Assumes public or authenticated API access to client Zendesk documentation.
+- **Sprint 2: Generation Engine:** Assumes OpenAI/Anthropic API quotas and billing accounts are active.
+- **Sprint 3: Agent UI Extension:** Assumes Google Chrome web store internal publishing permissions.
+- **Sprint 4: Observability & Launch:** Assumes target latency SLA is < 1200ms per agent recommendation.
+
+
+#### Example 2: Mobile App — Patient Medication Tracker & Telehealth Reminders
+**Context:** Cross-platform React Native healthcare mobile app with HIPAA-compliant secure storage, push notifications, and doctor prescription sync.
+**Project Type:** mobile_app | **Format:** line_items | **Detail Level:** medium
+
+##### Project Summary
+User-friendly patient adherence mobile app with local encrypted database (SQLCipher), scheduled notifications, and REST sync with hospital clinic backend.
+
+##### Itemized Breakdown
+- **HIPAA-Compliant Local Storage & Biometric Auth:** 50 hours @ 62.50 EUR/h = 3,125.00 EUR
+- **Medication Scheduling & Offline Notification Engine:** 64 hours @ 62.50 EUR/h = 4,000.00 EUR
+- **Prescription Sync & Doctor Chat WebSocket:** 70 hours @ 62.50 EUR/h = 4,375.00 EUR
+- **Accessible UI/UX Design (WCAG AA):** 36 hours @ 50.00 EUR/h = 1,800.00 EUR
+- **QA Security Audit & Medical Device Regulation Checks:** 40 hours @ 50.00 EUR/h = 2,000.00 EUR
+- **Total:** 260 hours = 15,300.00 EUR | Estimated Duration: 6 weeks | Team: 1 Fullstack Engineer, 1 Designer/QA

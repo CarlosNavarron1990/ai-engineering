@@ -1,0 +1,14 @@
+Please review the following software project requirements and provide a rigorous estimation according to the system instructions.
+
+<project_description>
+{{ description }}
+</project_description>
+{% if reference_projects %}
+
+<reference_projects>
+Here are relevant reference projects for additional context:
+{% for project in reference_projects %}
+- **{{ project.name }}**: {{ project.description }}{% if project.duration_weeks %} (Estimated duration: {{ project.duration_weeks }} weeks){% endif %}{% if project.cost_eur %} (Budget: {{ project.cost_eur }} EUR){% endif %}
+{% endfor %}
+</reference_projects>
+{% endif %}

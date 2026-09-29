@@ -64,6 +64,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(estimations.router, prefix="/api/v1")
 app.include_router(estimations.router)
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
