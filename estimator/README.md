@@ -134,4 +134,42 @@ Lo que vive **fuera** del template (en código): el contrato (`EstimationRequest
 
 ---
 
-> Este proyecto forma parte del **Master en AI Engineering** y es la base sobre la que se construye en directo el resto de la Sesión 04 (output estructurado, guardrails, cache semántico).
+## Sesión 05 — Sesiones Conversacionales, Memoria y Adjuntos
+
+En esta fase el estimador evoluciona de un servicio *single-shot* a un servicio conversacional multi-turno capaz de refinar requerimientos y procesar documentos adjuntos.
+
+### 1. Nuevos Endpoints
+
+- **`POST /sessions`**: Crea una nueva sesión en memoria y devuelve `{"session_id": "uuid"}`.
+- **`POST /sessions/{session_id}/estimate`**: Endpoint multi-turno que acepta `multipart/form-data`:
+  - `transcript`: Texto de la transcripción o mensaje del turno.
+  - `attachments`: Archivos adjuntos opcionales (`.pdf`, `.docx`, `.txt`).
+  Devuelve la estimación actualizada junto con el `project_metadata` acumulado.
+
+### 2. Decisiones Arquitectónicas
+
+#### A. Gestión de Adjuntos: Camino B (Extracción Local)
+Se implementó **Camino B (extracción local con `pypdf` y `python-docx`)** en lugar de Camino A (Files API de proveedores):
+- **Independencia de Proveedor**: El texto extraído se concatena de forma limpia al prompt (`--- attachment: filename ---`), permitiendo que el backend cambie transparentemente entre OpenAI, Anthropic o modelos locales sin acoplamiento a APIs propietarias.
+- **Eficiencia y Costos**: Evita sobrecostes de procesamiento multimodal en documentos donde el contenido es puramente textual.
+- **Preparación para RAG (Módulo 3)**: El pipeline de extracción local sienta las bases para futuros componentes de chunking, embedding y búsqueda vectorial sobre documentación técnica.
+
+#### B. Extracción de `project_metadata` (Heurística de Hechos)
+Para actualizar la memoria del proyecto se utiliza un extractor basado en reglas y patrones heurísticos sobre el turno:
+- **Cero Latencia Incremental**: No añade un segundo roundtrip de llamada LLM por cada interacción, manteniendo las respuestas ágiles.
+- **Determinismo**: Acumula tecnologías mencionadas sin duplicados (`mentioned_technologies`), detecta el tamaño de equipo y nombres de proyecto acordados.
+- **Inyección en System Prompt**: Se inyecta en el bloque `<project_metadata>` del template Jinja2, manteniendo al LLM anclado a los hechos acordados incluso cuando los mensajes antiguos salen de la ventana deslizante.
+
+#### C. Separación Operativa: Historial vs Memoria
+- **Historial (`messages`)**: Gestionado con una **ventana deslizante** de 6 turnos (`MAX_TURNS = 6`). Evita el desbordamiento de contexto y controla el coste por petición.
+- **Memoria (`project_metadata`)**: Vive fuera del historial. Preserva los hechos del proyecto de forma persistente a lo largo de toda la sesión.
+
+### 3. Ejecución de Tests
+
+```bash
+UV_LINK_MODE=copy uv run pytest
+```
+
+---
+
+> Este proyecto forma parte del **Master en AI Engineering**.

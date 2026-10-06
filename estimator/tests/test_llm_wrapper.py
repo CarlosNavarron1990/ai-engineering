@@ -132,7 +132,7 @@ def test_complete_stream_yields_chunks_and_caches(wrapper: LLMWrapper) -> None:
         SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="world"))]),
         SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]),
     ]
-    with patch.object(wrapper.router, "completion", return_value=iter(chunks)):
+    with patch("litellm.completion", return_value=iter(chunks)):
         emitted = list(
             wrapper.complete_stream(
                 system_prompt="sys",
@@ -144,7 +144,7 @@ def test_complete_stream_yields_chunks_and_caches(wrapper: LLMWrapper) -> None:
     assert "".join(emitted) == "Hello world"
 
     # Now the same request hits the cache and replays the full text as one chunk.
-    with patch.object(wrapper.router, "completion") as router_call:
+    with patch("litellm.completion") as direct_call:
         replayed = list(
             wrapper.complete_stream(
                 system_prompt="sys",
@@ -153,5 +153,5 @@ def test_complete_stream_yields_chunks_and_caches(wrapper: LLMWrapper) -> None:
                 max_tokens=4000,
             )
         )
-    assert router_call.call_count == 0
+    assert direct_call.call_count == 0
     assert "".join(replayed) == "Hello world"
