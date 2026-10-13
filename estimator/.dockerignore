@@ -11,7 +11,12 @@ __pycache__
 dist
 build
 .DS_Store
+**/.DS_Store
+._*
+**/._*
 .idea
 .vscode
 README.md
 tests
+docs
+evals
