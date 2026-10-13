@@ -280,7 +280,10 @@ def _execute_turn(
 # -- main loop ---------------------------------------------------------------
 
 
+from datetime import datetime
+
 _CSV_COLUMNS = [
+    "timestamp",
     "scenario",
     "attachment_size_kb",
     "repeat",
@@ -336,6 +339,7 @@ def _run_one_session(
     rows_written = 0
     for turn in scenario.turns:
         row: dict[str, Any] = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "scenario": scenario.name,
             "attachment_size_kb": size_kb,
             "repeat": repeat,
