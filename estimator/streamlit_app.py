@@ -225,18 +225,47 @@ if submitted:
             except httpx.HTTPError as exc:
                 st.error(f"No se pudo conectar con el servicio en `{estimate_url}`: {exc}")
             else:
+                # Format assistant message from structured result or text
+                res_obj = result.get("result")
+                if isinstance(res_obj, dict):
+                    summary_text = res_obj.get("summary", "")
+                    total_cost = res_obj.get("total_cost_eur", 0)
+                    confidence = res_obj.get("confidence_pct", 0)
+                    phases = res_obj.get("phases", [])
+
+                    phases_table = "\n\n| Fase | Duración (sem) | Costo (€) |\n|---|---:|---:|\n"
+                    for ph in phases:
+                        p_name = ph.get("phase_name", "")
+                        p_dur = ph.get("duration_weeks", "")
+                        p_cost = ph.get("cost_eur", 0)
+                        phases_table += f"| {p_name} | {p_dur} | €{p_cost:,} |\n"
+
+                    assistant_text = (
+                        f"{summary_text}\n\n"
+                        f"💰 **Total Estimado:** `€{total_cost:,} EUR` | 🎯 **Confianza:** `{confidence}%`"
+                        f"{phases_table if phases else ''}"
+                    )
+                else:
+                    assistant_text = result.get("text", str(res_obj or "Estimación completada."))
+
                 # Update turns history in session state
                 st.session_state["turns"].append(
                     {
                         "user": transcript.strip(),
                         "attachments": file_names,
-                        "assistant": result["text"],
+                        "assistant": assistant_text,
                         "observation": result.get("observation"),
                     }
                 )
 
-                # Update live project metadata in session state
-                if "project_metadata" in result:
-                    st.session_state["project_metadata"] = result["project_metadata"]
+                # Fetch updated session metadata from backend to sync sidebar
+                try:
+                    s_resp = httpx.get(f"{SESSIONS_ENDPOINT}/{session_id}", timeout=5.0)
+                    if s_resp.status_code == 200:
+                        s_info = s_resp.json()
+                        if "metadata" in s_info:
+                            st.session_state["project_metadata"] = s_info["metadata"]
+                except Exception:
+                    pass
 
                 st.rerun()
