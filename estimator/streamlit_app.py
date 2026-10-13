@@ -235,10 +235,10 @@ if submitted:
 
                     phases_table = "\n\n| Fase | Duración (sem) | Costo (€) |\n|---|---:|---:|\n"
                     for ph in phases:
-                        p_name = ph.get("phase_name", "")
+                        p_name = ph.get("name") or ph.get("phase_name", "Fase")
                         p_dur = ph.get("duration_weeks", "")
                         p_cost = ph.get("cost_eur", 0)
-                        phases_table += f"| {p_name} | {p_dur} | €{p_cost:,} |\n"
+                        phases_table += f"| {p_name} | {p_dur} sem | €{p_cost:,} |\n"
 
                     assistant_text = (
                         f"{summary_text}\n\n"
