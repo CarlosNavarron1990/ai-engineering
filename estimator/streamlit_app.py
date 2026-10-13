@@ -127,6 +127,17 @@ for idx, turn in enumerate(st.session_state["turns"]):
             st.caption(f"📎 Adjuntos: {', '.join(turn['attachments'])}")
     with st.chat_message("assistant"):
         st.markdown(turn["assistant"])
+        if turn.get("observation"):
+            obs = turn["observation"]
+            st.caption(
+                f"📊 **Telemetría Turno #{obs.get('turn_index')}**: "
+                f"⏱️ `{obs.get('latency_ms', 0)} ms` | "
+                f"🪙 `${obs.get('cost_usd', 0.0):.5f}` | "
+                f"📥 `{obs.get('tokens_in', 0)} tokens in`"
+                + (f" | 📎 `{obs.get('attachments_total_chars', 0)} chars adjunto`" if obs.get("attachments_total_chars") else "")
+            )
+            with st.expander("🔍 Ver telemetría completa del turno (13 métricas)"):
+                st.json(obs)
 
 # Input Form for New Turn
 with st.form("turn_form", clear_on_submit=True):
@@ -195,6 +206,7 @@ if submitted:
                         "user": transcript.strip(),
                         "attachments": file_names,
                         "assistant": result["text"],
+                        "observation": result.get("observation"),
                     }
                 )
 
