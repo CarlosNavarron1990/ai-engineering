@@ -43,7 +43,7 @@ COPY app/ /app/app/
 COPY streamlit_app.py /app/streamlit_app.py
 
 # Ensure the non-root user owns everything it needs to run.
-RUN chown -R appuser:appgroup /app
+RUN chown -R appuser:appgroup /app && chmod -R 755 /app
 
 # Put the virtual environment's bin directory first on PATH so `python` and
 # `uvicorn` resolve to the versions installed inside the venv.
