@@ -147,6 +147,26 @@ with st.form("turn_form", clear_on_submit=True):
         height=140,
     )
 
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        project_type = st.selectbox(
+            "Tipo de Proyecto:",
+            options=["web_saas", "mobile_app", "internal_tool", "data_pipeline"],
+            index=0,
+        )
+    with col2:
+        detail_level = st.selectbox(
+            "Nivel de Detalle:",
+            options=["medium", "summary", "detailed"],
+            index=0,
+        )
+    with col3:
+        output_format = st.selectbox(
+            "Formato de Salida:",
+            options=["phases_table", "line_items", "narrative"],
+            index=0,
+        )
+
     uploaded_files = st.file_uploader(
         "Adjuntar especificaciones o minutas (opcional)",
         type=["pdf", "docx", "txt"],
@@ -163,8 +183,8 @@ if submitted:
         session_id = init_remote_session()
         st.session_state["session_id"] = session_id
 
-    if not transcript.strip():
-        st.error("Por favor ingresa una transcripción o mensaje para este turno.")
+    if len(transcript.strip()) < 20:
+        st.error("Por favor ingresa al menos 20 caracteres para estimar con contexto.")
     elif not session_id:
         st.error("No se pudo establecer una sesión con el servicio de estimación.")
     else:
@@ -182,7 +202,12 @@ if submitted:
                 )
                 file_names.append(uploaded_file.name)
 
-        data_payload = {"transcript": transcript.strip()}
+        data_payload = {
+            "transcript": transcript.strip(),
+            "project_type": project_type,
+            "detail_level": detail_level,
+            "output_format": output_format,
+        }
         estimate_url = f"{SESSIONS_ENDPOINT}/{session_id}/estimate"
 
         with st.spinner("Procesando turno y generando estimación..."):
