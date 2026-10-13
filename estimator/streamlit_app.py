@@ -225,26 +225,47 @@ if submitted:
             except httpx.HTTPError as exc:
                 st.error(f"No se pudo conectar con el servicio en `{estimate_url}`: {exc}")
             else:
-                # Format assistant message from structured result or text
+                # Format assistant message with comprehensive estimation analysis
                 res_obj = result.get("result")
                 if isinstance(res_obj, dict):
                     summary_text = res_obj.get("summary", "")
                     total_cost = res_obj.get("total_cost_eur", 0)
+                    total_duration = res_obj.get("total_duration_weeks", 0)
                     confidence = res_obj.get("confidence_pct", 0)
                     phases = res_obj.get("phases", [])
 
-                    phases_table = "\n\n| Fase | Duración (sem) | Costo (€) |\n|---|---:|---:|\n"
-                    for ph in phases:
-                        p_name = ph.get("name") or ph.get("phase_name", "Fase")
-                        p_dur = ph.get("duration_weeks", "")
-                        p_cost = ph.get("cost_eur", 0)
-                        phases_table += f"| {p_name} | {p_dur} sem | €{p_cost:,} |\n"
+                    if summary_text.startswith("Out of scope:"):
+                        assistant_text = (
+                            f"### ⚠️ Fuera de Alcance / Información Insuficiente\n\n"
+                            f"{summary_text}\n\n"
+                            f"> 💡 **Sugerencia**: Proporciona detalles adicionales sobre las funcionalidades clave, "
+                            f"roles de usuario, arquitectura esperada o adjunta un archivo PDF/Word de requerimientos "
+                            f"para que el estimador pueda calcular las fases con suficiente confianza."
+                        )
+                    else:
+                        metrics_summary = (
+                            f"| ⏱️ **Duración Total** | 💰 **Costo Total** | 🎯 **Confianza** |\n"
+                            f"| :---: | :---: | :---: | \n"
+                            f"| **{total_duration} semanas** | **€{total_cost:,} EUR** | **{confidence}%** |\n\n"
+                        )
 
-                    assistant_text = (
-                        f"{summary_text}\n\n"
-                        f"💰 **Total Estimado:** `€{total_cost:,} EUR` | 🎯 **Confianza:** `{confidence}%`"
-                        f"{phases_table if phases else ''}"
-                    )
+                        phases_detail = "### 📋 Desglose Analítico por Fases\n\n"
+                        for ph in phases:
+                            p_name = ph.get("name") or ph.get("phase_name", "Fase")
+                            p_dur = ph.get("duration_weeks", "")
+                            p_cost = ph.get("cost_eur", 0)
+                            p_sum = ph.get("summary", "")
+                            phases_detail += (
+                                f"**• {p_name}** (`{p_dur} sem` — `€{p_cost:,} EUR`)\n\n"
+                                f"> {p_sum}\n\n"
+                            )
+
+                        assistant_text = (
+                            f"### 📊 Análisis de Estimación\n\n"
+                            f"{summary_text}\n\n"
+                            f"{metrics_summary}"
+                            f"{phases_detail}"
+                        )
                 else:
                     assistant_text = result.get("text", str(res_obj or "Estimación completada."))
 
