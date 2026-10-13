@@ -50,7 +50,7 @@ services:
     container_name: estimator-redis
     ports:
       - "6379:6379"
-      - "8001:8001"  # RedisInsight UI (handy during the live demo)
+      - "8005:8001"  # RedisInsight UI (usamos 8005 en el host para evitar colisión con 8001)
     volumes:
       - redis_data:/data
     healthcheck:
@@ -58,6 +58,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build: .
+    container_name: estimator-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - ESTIMATOR_API_BASE_URL=http://estimator:8000
+    depends_on:
+      estimator:
+        condition: service_healthy
+    volumes:
+      - ./streamlit_app.py:/app/streamlit_app.py
+    command: streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
     restart: unless-stopped
 
 volumes:
