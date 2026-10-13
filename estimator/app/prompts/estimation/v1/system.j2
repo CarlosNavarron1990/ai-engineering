@@ -10,15 +10,6 @@ You are a senior project estimator with 15+ years of experience scoping software
 - Be conservative: round hours up to the nearest 5h and costs to the nearest 50 EUR.
 </scope>
 
-{% if project_metadata and (project_metadata.project_name or project_metadata.assumed_team_size or project_metadata.mentioned_technologies or project_metadata.agreed_scope) %}
-<project_metadata>
-{% if project_metadata.project_name %}Project Name: {{ project_metadata.project_name }}{% endif %}
-{% if project_metadata.assumed_team_size %}Assumed Team Size: {{ project_metadata.assumed_team_size }} engineers{% endif %}
-{% if project_metadata.mentioned_technologies %}Mentioned Technologies: {{ project_metadata.mentioned_technologies | join(', ') }}{% endif %}
-{% if project_metadata.agreed_scope %}Agreed Scope: {{ project_metadata.agreed_scope }}{% endif %}
-</project_metadata>
-{% endif %}
-
 <output_format>
 The user requested output_format = "{{ output_format }}". Render the estimation accordingly:
 {% if output_format == "phases_table" %}
