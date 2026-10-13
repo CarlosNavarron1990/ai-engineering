@@ -204,6 +204,28 @@ Los tres tests son de integración con `TestClient`, un `FakeLLMWrapper` que cap
 
 El cliente Rails (`estimator-web/`) se adaptó al flujo conversacional con un nuevo controller `ChatSessionsController` (rutas `/chat_sessions`, root re-apuntado aquí), un panel lateral con el `ProjectMetadata` actual, multipart vía `faraday-multipart` y un botón "Nueva conversación" que destruye el mirror local y arranca una sesión limpia. El endpoint transaccional `EstimationsController` se mantiene operativo para la demo histórica.
 
+### Sesión 06 — CAG Stress Testing & Justificación de RAG
+
+En la Sesión 06 se implementó el framework de stress testing para mapear empíricamente los límites de **Context-Augmented Generation (CAG)** frente a **Retrieval-Augmented Generation (RAG)**:
+
+1. **Dataset Empírico (`results.csv`)**:
+   - Archivo: [`evals/stress/results.csv`](evals/stress/results.csv)
+   - Contiene **300 turnos observados** cruzando 3 topologías multi-turno (`growing`, `pivot`, `contradiction`) con 5 tamaños de adjuntos calibrados (0, 5, 20, 50, 100 KB) a lo largo de 20 turnos por sesión.
+   - Cada fila detalla: `cost_usd`, `latency_ms`, `tokens_in`, `tokens_out`, drift de memoria y presupuestos evaluados.
+
+2. **Informe Analítico de Gasto y Latencia (`REPORT.md`)**:
+   - Archivo: [`evals/stress/REPORT.md`](evals/stress/REPORT.md)
+   - Incluye la **tabla resumen de gasto total en USD**, percentiles P50/P95, las 3 curvas canónicas de rendimiento y la justificación matemática de por qué RAG es necesario cuando el contexto supera los 5–20 KB.
+
+3. **Ejecutar el Stress Test**:
+   ```bash
+   # Modo simulación determinístico (sin coste de API):
+   uv run python -m evals.stress.run --mock
+
+   # Modo live contra OpenAI:
+   uv run python -m evals.stress.run --scenarios growing --attachment-sizes 0,5
+   ```
+
 ---
 
-> Este proyecto forma parte del **Master en AI Engineering** y es la base sobre la que se construye en directo el resto de la Sesión 04 (output estructurado, guardrails, cache semántico) y de la Sesión 05 (compresión avanzada de memoria con anclas, tier dinámico, patrón Actor-Critic-Boss).
+> Este proyecto forma parte del **Master en AI Engineering** y es la base sobre la que se construyen las sesiones 04, 05 (compresión de memoria, anclas, Actor-Critic-Boss) y 06 (evaluaciones de estrés de CAG vs RAG).
