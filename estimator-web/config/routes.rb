@@ -9,6 +9,16 @@ Rails.application.routes.draw do
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
-  resource :estimation, only: [ :new, :create ], controller: "estimations"
-  root "estimations#new"
+  resources :estimations, only: [ :index, :new, :create, :show ]
+
+  # Session 5 conversational flow. ``create`` is bound to a specific session
+  # (POST /chat_sessions/:id) — :new creates the underlying session lazily
+  # when the page first loads.
+  resources :chat_sessions, only: [ :new, :show, :destroy ] do
+    member do
+      post :create
+    end
+  end
+
+  root "chat_sessions#new"
 end

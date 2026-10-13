@@ -1,115 +1,236 @@
-"""Router for multi-turn conversational session endpoints.
+"""Conversational endpoints for Session 5.
 
-POST /sessions                          — Initialize a new empty session.
-POST /sessions/{session_id}/estimate    — Submit a turn with optional attachments.
+Three endpoints:
+
+- ``POST /sessions``                       — create a new session, return its UUID.
+- ``POST /sessions/{session_id}/estimate`` — multi-turn estimation. Accepts
+  ``multipart/form-data`` with the transcript plus optional file attachments
+  (PDF or DOCX). Attachment text is extracted locally (Camino B) and
+  concatenated into the transcript before the LLM is invoked.
+- ``GET  /sessions/{session_id}``          — debug view of the session
+  (metadata + history length). Used by the Rails panel.
+
+Error mapping mirrors the v1 router:
+- ``InputGuardrailViolation`` → 400 with ``{reason, message}``.
+- ``UnsupportedAttachmentError`` → 415.
+- ``AttachmentExtractionError``  → 422.
+- ``SessionNotFoundError`` → 404.
+- anything else → 502.
 """
 
 from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 
-from app.dependencies import get_llm_wrapper
-from app.prompts import render_session_system_prompt
-from app.schemas.session import SessionCreateResponse, SessionEstimateResponse
-from app.services.attachment_extractor import extract_attachment_text
-from app.services.llm_wrapper import LLMWrapper
-from app.services.metadata_extractor import update_project_metadata
-from app.sessions import create_session, get_session
+from app.attachments.extractor import (
+    AttachmentExtractionError,
+    UnsupportedAttachmentError,
+    enrich_transcript,
+    extract_text,
+)
+from app.config import get_settings
+from app.dependencies import get_estimation_service, get_session_store
+from app.guardrails.input import InputGuardrailViolation
+from app.schemas.estimation import (
+    ACBResponse,
+    DetailLevel,
+    EstimationResponse,
+    OutputFormat,
+    ProjectType,
+)
+from app.services.estimation import EstimationService
+from app.sessions.models import ProjectMetadata
+from app.sessions.store import SessionNotFoundError, SessionStore
+from app.sessions.tier_resolver import Tier
 
 log = structlog.get_logger()
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
-PROMPT_VERSION = "v1"
+
+class CreateSessionResponse(BaseModel):
+    session_id: str = Field(description="UUID identifier for the new conversational session.")
 
 
-@router.post("", response_model=SessionCreateResponse)
-def init_session() -> SessionCreateResponse:
-    """Initialize a new conversational estimation session."""
-    session = create_session()
+class SessionInfoResponse(BaseModel):
+    session_id: str
+    message_count: int
+    max_turns: int
+    metadata: ProjectMetadata
+    anchors_count: int = 0
+    summary_chars: int = 0
+    last_resolved_tier: str | None = None
+    last_tier_rule: str | None = None
+
+
+@router.post("", response_model=CreateSessionResponse, status_code=201)
+def create_session(
+    store: SessionStore = Depends(get_session_store),
+) -> CreateSessionResponse:
+    session = store.create()
     log.info("session_created", session_id=session.session_id)
-    return SessionCreateResponse(session_id=session.session_id)
+    return CreateSessionResponse(session_id=session.session_id)
 
 
-@router.post("/{session_id}/estimate", response_model=SessionEstimateResponse)
-async def estimate_session_turn(
+@router.get("/{session_id}", response_model=SessionInfoResponse)
+def get_session(
     session_id: str,
-    transcript: str = Form(..., description="Transcript or user text for this turn."),
-    attachments: list[UploadFile] = File(
-        default=[], description="Optional document attachments (.pdf, .docx, .txt)."
-    ),
-    wrapper: LLMWrapper = Depends(get_llm_wrapper),
-) -> SessionEstimateResponse:
-    """Submit a conversational turn with optional attachments and receive an estimate."""
-    session = get_session(session_id)
-    if session is None:
-        log.warning("session_not_found", session_id=session_id)
-        raise HTTPException(status_code=404, detail="Session not found")
+    store: SessionStore = Depends(get_session_store),
+) -> SessionInfoResponse:
+    try:
+        session = store.get_or_404(session_id)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session_not_found") from exc
+    return SessionInfoResponse(
+        session_id=session.session_id,
+        message_count=len(session.history.messages),
+        max_turns=session.history.max_turns,
+        metadata=session.metadata,
+        anchors_count=len(session.history.anchors),
+        summary_chars=len(session.history.summary or ""),
+        last_resolved_tier=session.last_resolved_tier,
+        last_tier_rule=session.last_tier_rule,
+    )
 
-    # Extract text from any attached files (Camino B)
-    attachment_blocks: list[str] = []
-    for attachment in attachments:
-        extracted = await extract_attachment_text(attachment)
-        attachment_blocks.append(extracted)
 
-    full_user_turn = transcript
-    if attachment_blocks:
-        full_user_turn = f"{transcript}\n\n" + "\n\n".join(attachment_blocks)
+async def _resolve_session_and_enrich(
+    session_id: str,
+    transcript: str,
+    attachments: list[UploadFile],
+    store: SessionStore,
+):
+    """Shared prelude for both /estimate and /estimate-acb.
 
+    Returns ``(session, enriched_transcript)``. Raises ``HTTPException`` for
+    session/attachment problems; the caller wraps the LLM call separately.
+    """
+    try:
+        session = store.get_or_404(session_id)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session_not_found") from exc
+
+    settings = get_settings()
+    extracted: list[tuple[str, str]] = []
+    for upload in attachments or []:
+        if not upload.filename:
+            continue
+        content = await upload.read()
+        try:
+            text = extract_text(
+                filename=upload.filename,
+                content=content,
+                max_chars=settings.MAX_ATTACHMENT_CHARS,
+            )
+        except UnsupportedAttachmentError as exc:
+            raise HTTPException(
+                status_code=415,
+                detail={"reason": "unsupported_attachment", "filename": exc.filename},
+            ) from exc
+        except AttachmentExtractionError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "reason": "attachment_extraction_failed",
+                    "filename": exc.filename,
+                    "message": exc.message,
+                },
+            ) from exc
+        if text:
+            extracted.append((upload.filename, text))
+
+    enriched = enrich_transcript(transcript=transcript, attachments=extracted)
     log.info(
-        "session_turn_received",
+        "session_estimate_received",
         session_id=session_id,
         transcript_chars=len(transcript),
-        attachments_count=len(attachments),
-        has_metadata=session.metadata.has_facts(),
+        enriched_transcript_chars=len(enriched),
+        attachment_count=len(extracted),
     )
+    return session, enriched
 
-    # Render dynamic system prompt containing current project metadata
-    system_prompt = render_session_system_prompt(
-        project_metadata=session.metadata,
-        version=PROMPT_VERSION,
-    )
 
-    # Buffer user turn and construct OpenAI/LiteLLM message array
-    session.history.add_user_message(full_user_turn)
-    messages = session.history.to_messages_list(system_prompt)
-
-    try:
-        result = wrapper.complete_messages(messages=messages)
-    except Exception as exc:
-        log.error(
-            "session_turn_llm_failed",
-            session_id=session_id,
-            error=str(exc),
-            error_type=type(exc).__name__,
+def _map_pipeline_errors(exc: Exception) -> HTTPException:
+    """Same mapping for both endpoints: input guardrail → 400, else → 502."""
+    if isinstance(exc, InputGuardrailViolation):
+        log.info(
+            "session_estimate_blocked_by_input_guardrail",
+            reason=exc.reason,
+            message=exc.message,
         )
-        raise HTTPException(status_code=502, detail="Upstream LLM call failed") from exc
-
-    estimation_text = result["estimation"]
-
-    # Close the turn in history (enforcing sliding window)
-    session.history.add_assistant_message(estimation_text)
-
-    # Extract new facts from interaction and update metadata
-    session.metadata = update_project_metadata(
-        current=session.metadata,
-        user_text=full_user_turn,
-        assistant_text=estimation_text,
+        return HTTPException(
+            status_code=400, detail={"reason": exc.reason, "message": exc.message}
+        )
+    log.error(
+        "session_estimate_endpoint_error",
+        error=str(exc)[:400],
+        error_type=type(exc).__name__,
     )
-    session.touch()
+    return HTTPException(status_code=502, detail="Upstream LLM call failed")
 
-    log.info(
-        "session_turn_completed",
-        session_id=session_id,
-        output_chars=len(estimation_text),
-        team_size=session.metadata.assumed_team_size,
-        technologies=session.metadata.mentioned_technologies,
-    )
 
-    return SessionEstimateResponse(
-        session_id=session.session_id,
-        text=estimation_text,
-        prompt_version=PROMPT_VERSION,
-        project_metadata=session.metadata,
+@router.post("/{session_id}/estimate", response_model=EstimationResponse)
+async def estimate_in_session(
+    session_id: str,
+    transcript: str = Form(..., min_length=20, max_length=80_000),
+    project_type: ProjectType = Form(...),
+    detail_level: DetailLevel = Form(...),
+    output_format: OutputFormat = Form(...),
+    tier: Tier | None = Form(default=None),
+    attachments: list[UploadFile] = File(default_factory=list),
+    store: SessionStore = Depends(get_session_store),
+    service: EstimationService = Depends(get_estimation_service),
+) -> EstimationResponse:
+    session, enriched = await _resolve_session_and_enrich(
+        session_id, transcript, attachments, store
     )
+    try:
+        return service.estimate_conversational(
+            session=session,
+            transcript=enriched,
+            project_type=project_type,
+            detail_level=detail_level,
+            output_format=output_format,
+            tier=tier,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _map_pipeline_errors(exc) from exc
+
+
+@router.post("/{session_id}/estimate-acb", response_model=ACBResponse)
+async def estimate_in_session_acb(
+    session_id: str,
+    transcript: str = Form(..., min_length=20, max_length=80_000),
+    project_type: ProjectType = Form(...),
+    detail_level: DetailLevel = Form(...),
+    output_format: OutputFormat = Form(...),
+    tier: Tier | None = Form(default=None),
+    attachments: list[UploadFile] = File(default_factory=list),
+    store: SessionStore = Depends(get_session_store),
+    service: EstimationService = Depends(get_estimation_service),
+) -> ACBResponse:
+    """Actor-Critic-Boss variant of /estimate.
+
+    Same multipart contract; the response carries an ``acb`` field with the
+    iteration trail (verdict, confidence, issues per round) so callers can
+    show the audit trail in their UI.
+    """
+    session, enriched = await _resolve_session_and_enrich(
+        session_id, transcript, attachments, store
+    )
+    try:
+        return service.estimate_with_acb(
+            session=session,
+            transcript=enriched,
+            project_type=project_type,
+            detail_level=detail_level,
+            output_format=output_format,
+            tier=tier,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _map_pipeline_errors(exc) from exc
